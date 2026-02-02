@@ -1,7 +1,0 @@
-{
-  "name": "ZenFortune - 灵境运势",
-  "description": "融合东方玄学与AI智慧的运势应用。通过生辰八字、每日感悟或传统的求签仪式，为您解析今日运势，指引生活方向。",
-  "requestFramePermissions": [
-    "camera"
-  ]
-}
