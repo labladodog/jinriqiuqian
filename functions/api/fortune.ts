@@ -15,38 +15,51 @@ export const onRequestPost: PagesFunction = async (context) => {
     const { profile, method, input, base64Image } = await context.request.json() as any;
     
     // 初始化 AI 客户端。密钥必须从 process.env.API_KEY 读取。
-    // 在 Cloudflare 控制台设置环境变量后，process.env 将自动可用。
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    const profileContext = `缘主姓名：${profile.name}，乾坤卦位：${profile.gender === 'male' ? '乾/男' : '坤/女'}。生辰：${profile.birthDate} ${profile.birthTime}。`;
+    const profileContext = `缘主姓名：${profile.name}，生辰：${profile.birthDate} ${profile.birthTime}。性别：${profile.gender === 'male' ? '乾/男' : '坤/女'}。`;
     
-    let userPrompt = "";
-    let imagePart = null;
+    let parts: any[] = [];
 
     if (method === 'image' && base64Image) {
-      imagePart = { 
-        inlineData: { 
-          mimeType: "image/jpeg", 
-          data: base64Image.split(',')[1] || base64Image 
-        } 
-      };
-      userPrompt = `${profileContext}\n缘主刚通过灵境自拍，请结合其生辰八字与面相气色，推演今日运势。`;
+      parts = [
+        {
+          inlineData: {
+            mimeType: "image/jpeg",
+            data: base64Image.split(',')[1] || base64Image
+          }
+        },
+        { text: `${profileContext} 用户上传了瞬时面相照片。请结合生辰八字（娱乐化解析）与面相气色，推演今日运势。请务必使用中文返回 JSON。` }
+      ];
     } else if (method === 'alignment') {
-      userPrompt = `${profileContext} 正在同步名士 "${input}" 的磁场，请分析契合度并返回中文 JSON。`;
+      parts = [{ text: `
+        ${profileContext} 
+        当前行为：尝试与古代名士 "${input}" 进行命理契合。
+        请分析缘主今日磁场与该名士历史性格/命理的契合度（0-100）。
+        并以此契合度为引子，给出今日运势解析。
+        请务必使用中文返回符合 Schema 的 JSON。
+      ` }];
     } else {
-      userPrompt = `${profileContext}\n缘主今日行为：${method === 'stick' ? '求得一签' : '写下感悟'}，内容为 "${input}"。请据此推演天机。`;
+      const methodDesc = method === 'stick' 
+        ? `求得灵签：${input}`
+        : `写下感悟： "${input}"`;
+      parts = [{ text: `
+        ${profileContext}
+        当前行为：${methodDesc}。
+        请以周易玄学结合现代心理学，推演今日运势。
+        请务必使用中文返回符合 Schema 的 JSON。
+      ` }];
     }
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: imagePart ? { parts: [imagePart, { text: userPrompt }] } : userPrompt,
+      contents: { parts },
       config: {
-        systemInstruction: "你是一位精通周易、命理与心理学的当代仙师。你的职责是为缘主指点迷津。判词要典雅古朴（如四言、五言诗），建议要落地且富有智慧。务必使用中文并严格按照提供的 JSON Schema 返回数据。",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            overallScore: { type: Type.INTEGER, description: "1-5星级" },
+            overallScore: { type: Type.INTEGER, description: "综合评分 1-5" },
             summary: { type: Type.STRING, description: "今日总述" },
             categories: {
               type: Type.OBJECT,
@@ -58,22 +71,27 @@ export const onRequestPost: PagesFunction = async (context) => {
               },
               required: ["wealth", "career", "love", "health"]
             },
-            advice: { type: Type.STRING, description: "具体的建议" },
+            advice: { type: Type.STRING, description: "仙人指路" },
             luckyColor: { type: Type.STRING },
             luckyNumber: { type: Type.STRING },
             luckyDirection: { type: Type.STRING },
-            poem: { type: Type.STRING, description: "古风判词" },
-            auraColor: { type: Type.STRING, description: "建议的背景颜色码" },
-            vibeTag: { type: Type.STRING, description: "简短的气场标签" },
-            alignmentScore: { type: Type.INTEGER, description: "名士契合百分比" }
+            poem: { type: Type.STRING, description: "判词或小诗" },
+            auraColor: { type: Type.STRING, description: "十六进制颜色值，如 #ef4444" },
+            vibeTag: { type: Type.STRING, description: "今日气场标签，如：紫气东来" },
+            alignmentScore: { type: Type.INTEGER, description: "契合度评分" }
           },
           required: ["overallScore", "summary", "categories", "advice", "luckyColor", "luckyNumber", "luckyDirection", "poem", "vibeTag"]
         },
       },
     });
 
-    // 直接返回生成的文本（JSON 字符串）
-    return new Response(response.text, {
+    const resText = response.text;
+    const res = JSON.parse(resText);
+    if (method === 'alignment') {
+      res.alignmentFigure = input;
+    }
+
+    return new Response(JSON.stringify(res), {
       headers: { "Content-Type": "application/json" }
     });
   } catch (error: any) {

@@ -13,10 +13,10 @@ export const onRequestPost: PagesFunction = async (context) => {
   try {
     const { text } = await context.request.json() as any;
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
+
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",
-      contents: [{ parts: [{ text: `请用慈祥、睿智的口吻诵读：${text}` }] }],
+      contents: [{ parts: [{ text: `请用慈祥、庄严、略带仙风道骨的口吻诵读：${text}` }] }],
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
